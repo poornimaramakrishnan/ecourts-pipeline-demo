@@ -1,0 +1,61 @@
+name: "1 · Parser Test Suite (83 tests)"
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  IMAGE: ghcr.io/poornimaramakrishnan/votum-ecourts:latest
+
+jobs:
+  run-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pull image
+        run: docker pull $IMAGE
+
+      - name: Run tests and collect artifacts
+        run: |
+          mkdir -p ${{ github.workspace }}/out
+          docker run --rm \
+            -v "${{ github.workspace }}/out:/out" \
+            "$IMAGE" \
+            python /app/demo/run_tests.py --out /out
+
+      - name: Summarise results
+        if: always()
+        run: |
+          echo "## 🧪 Parser Test Suite" >> $GITHUB_STEP_SUMMARY
+          if [ -f "${{ github.workspace }}/out/pytest-output.txt" ]; then
+            LAST=$(grep -E "passed|failed|error" \
+              "${{ github.workspace }}/out/pytest-output.txt" | tail -n1)
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "$LAST" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📎 **test-report** — open \`test-report.html\` for full per-test detail." >> $GITHUB_STEP_SUMMARY
+          echo "📎 **fixture-pdfs** — the synthetic court PDFs used during the run." >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report
+          path: |
+            ${{ github.workspace }}/out/junit-results.xml
+            ${{ github.workspace }}/out/test-report.html
+            ${{ github.workspace }}/out/pytest-output.txt
+          retention-days: 30
+
+      - name: Upload fixture PDFs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fixture-pdfs
+          path: ${{ github.workspace }}/out/*.pdf
+          if-no-files-found: ignore
+          retention-days: 30

@@ -1,0 +1,57 @@
+name: "3 · End-to-End Pipeline (parse → normalise → PDF report)"
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  IMAGE: ghcr.io/poornimaramakrishnan/votum-ecourts:latest
+
+jobs:
+  pipeline:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pull image
+        run: docker pull $IMAGE
+
+      - name: Run end-to-end pipeline
+        run: |
+          mkdir -p ${{ github.workspace }}/out
+          docker run --rm \
+            -v "${{ github.workspace }}/out:/out" \
+            "$IMAGE" \
+            python /app/demo/generate_report.py --out /out
+
+      - name: Summarise
+        if: always()
+        run: |
+          echo "## 📊 End-to-End Pipeline Results" >> $GITHUB_STEP_SUMMARY
+          JSON="${{ github.workspace }}/out/pipeline_entries.json"
+          PDF="${{ github.workspace }}/out/pipeline_report.pdf"
+          if [ -f "$JSON" ]; then
+            COUNT=$(python3 -c "import json; print(len(json.load(open('$JSON'))))")
+            echo "✅ **$COUNT entries** parsed and normalised (SCI + Delhi HC)." >> $GITHUB_STEP_SUMMARY
+          fi
+          if [ -f "$PDF" ]; then
+            echo "✅ PDF report generated successfully." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ PDF report was not produced." >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📎 Download **pipeline-output** to get:" >> $GITHUB_STEP_SUMMARY
+          echo "- \`pipeline_report.pdf\` — human-readable cause-list summary" >> $GITHUB_STEP_SUMMARY
+          echo "- \`pipeline_entries.json\` — all normalised entries with unified schema" >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload pipeline output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-output
+          path: |
+            ${{ github.workspace }}/out/pipeline_report.pdf
+            ${{ github.workspace }}/out/pipeline_entries.json
+          if-no-files-found: ignore
+          retention-days: 30

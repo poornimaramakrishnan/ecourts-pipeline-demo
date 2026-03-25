@@ -1,0 +1,52 @@
+name: "4 · Schema Conformance (all 7 courts)"
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  IMAGE: ghcr.io/poornimaramakrishnan/votum-ecourts:latest
+
+jobs:
+  schema-conformance:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pull image
+        run: docker pull $IMAGE
+
+      - name: Run schema conformance check
+        run: |
+          mkdir -p ${{ github.workspace }}/out
+          docker run --rm \
+            -v "${{ github.workspace }}/out:/out" \
+            "$IMAGE" \
+            python /app/demo/schema_check.py --out /out
+
+      - name: Summarise
+        if: always()
+        run: |
+          echo "## 🗂️ Schema Conformance Report" >> $GITHUB_STEP_SUMMARY
+          TXT="${{ github.workspace }}/out/schema_conformance.txt"
+          if [ -f "$TXT" ]; then
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            cat "$TXT" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          else
+            echo "No report produced." >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📎 Download **schema-conformance-report** for the full JSON results." >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload conformance report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: schema-conformance-report
+          path: |
+            ${{ github.workspace }}/out/schema_conformance.json
+            ${{ github.workspace }}/out/schema_conformance.txt
+          if-no-files-found: ignore
+          retention-days: 30
