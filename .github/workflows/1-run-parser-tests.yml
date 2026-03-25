@@ -21,6 +21,7 @@ jobs:
         run: |
           mkdir -p ${{ github.workspace }}/out
           docker run --rm \
+            --user root \
             -v "${{ github.workspace }}/out:/out" \
             "$IMAGE" \
             python /app/demo/run_tests.py --out /out
